@@ -7,8 +7,11 @@ import scipy
 
 from network_import import *
 from utils import PathUtils
-
-
+from scipy.optimize import minimize,root,fsolve
+vot1=1
+vot2=10
+price1=0.1
+price2=0.1
 class FlowTransportNetwork:
 
     def __init__(self):
@@ -94,7 +97,10 @@ class Link:
         self.curr_capacity_percentage = 1
         self.capacity = self.max_capacity
         self.flow = 0.0
-        self.cost = self.fft
+        self.flow1 = 0.0
+        self.flow2 = 0.0
+        self.cost1 = self.fft
+        self.cost2 = self.fft
 
     # Method not used for assignment
     def modify_capacity(self, delta_percentage: float):
@@ -109,8 +115,11 @@ class Link:
         self.reset_flow()
 
     def reset_flow(self):
+        self.flow1 = 0.0
+        self.flow2 = 0.0
         self.flow = 0.0
-        self.cost = self.fft
+        self.cost1 = self.fft
+        self.cost2 = self.fft
 
 
 class Demand:
@@ -124,30 +133,51 @@ class Demand:
         self.demand = float(demand)
 
 
-def DijkstraHeap(origin, network: FlowTransportNetwork):
+def DijkstraHeap(origin, network: FlowTransportNetwork, user_class):
     """
     Calcualtes shortest path from an origin to all other destinations.
     The labels and preds are stored in node instances.
     """
-    for n in network.nodeSet:
-        network.nodeSet[n].label = np.inf
-        network.nodeSet[n].pred = None
-    network.nodeSet[origin].label = 0.0
-    network.nodeSet[origin].pred = None
-    SE = [(0, origin)]
-    while SE:
-        currentNode = heapq.heappop(SE)[1]
-        currentLabel = network.nodeSet[currentNode].label
-        for toNode in network.nodeSet[currentNode].outLinks:
-            link = (currentNode, toNode)
-            newNode = toNode
-            newPred = currentNode
-            existingLabel = network.nodeSet[newNode].label
-            newLabel = currentLabel + network.linkSet[link].cost
-            if newLabel < existingLabel:
-                heapq.heappush(SE, (newLabel, newNode))
-                network.nodeSet[newNode].label = newLabel
-                network.nodeSet[newNode].pred = newPred
+    if user_class==1:
+        for n in network.nodeSet:
+            network.nodeSet[n].label = np.inf
+            network.nodeSet[n].pred = None
+        network.nodeSet[origin].label = 0.0
+        network.nodeSet[origin].pred = None
+        SE = [(0, origin)]
+        while SE:
+            currentNode = heapq.heappop(SE)[1]
+            currentLabel = network.nodeSet[currentNode].label
+            for toNode in network.nodeSet[currentNode].outLinks:
+                link = (currentNode, toNode)
+                newNode = toNode
+                newPred = currentNode
+                existingLabel = network.nodeSet[newNode].label
+                newLabel = currentLabel + network.linkSet[link].cost1
+                if newLabel < existingLabel:
+                    heapq.heappush(SE, (newLabel, newNode))
+                    network.nodeSet[newNode].label = newLabel
+                    network.nodeSet[newNode].pred = newPred
+    else: 
+        for n in network.nodeSet:
+            network.nodeSet[n].label = np.inf
+            network.nodeSet[n].pred = None
+        network.nodeSet[origin].label = 0.0
+        network.nodeSet[origin].pred = None
+        SE = [(0, origin)]
+        while SE:
+            currentNode = heapq.heappop(SE)[1]
+            currentLabel = network.nodeSet[currentNode].label
+            for toNode in network.nodeSet[currentNode].outLinks:
+                link = (currentNode, toNode)
+                newNode = toNode
+                newPred = currentNode
+                existingLabel = network.nodeSet[newNode].label
+                newLabel = currentLabel + network.linkSet[link].cost2
+                if newLabel < existingLabel:
+                    heapq.heappush(SE, (newLabel, newNode))
+                    network.nodeSet[newNode].label = newLabel
+                    network.nodeSet[newNode].pred = newPred
 
 
 def BPRcostFunction(optimal: bool,
@@ -201,7 +231,7 @@ def updateTravelTime(network: FlowTransportNetwork, optimal: bool = False, costF
     This method updates the travel time on the links with the current flow
     """
     for l in network.linkSet:
-        network.linkSet[l].cost = costFunction(optimal,
+        network.linkSet[l].cost1 = vot1*costFunction(optimal,
                                                network.linkSet[l].fft,
                                                network.linkSet[l].alpha,
                                                network.linkSet[l].flow,
@@ -209,10 +239,67 @@ def updateTravelTime(network: FlowTransportNetwork, optimal: bool = False, costF
                                                network.linkSet[l].beta,
                                                network.linkSet[l].length,
                                                network.linkSet[l].speedLimit
-                                               )
+                                               )+price1*network.linkSet[l].length
+        network.linkSet[l].cost2 = vot2*costFunction(optimal,
+                                               network.linkSet[l].fft,
+                                               network.linkSet[l].alpha,
+                                               network.linkSet[l].flow,
+                                               network.linkSet[l].capacity,
+                                               network.linkSet[l].beta,
+                                               network.linkSet[l].length,
+                                               network.linkSet[l].speedLimit
+                                               )+price2*network.linkSet[l].length
 
+
+# def findAlpha_2(x_bar, network: FlowTransportNetwork, optimal: bool = False, costFunction=BPRcostFunction):
+
+#     """
+#     This uses unconstrained optimization to calculate the optimal step size required
+#     for Frank-Wolfe Algorithm
+#     """
+
+#     def df(alpha):
+#         # assert 0 <= alpha1 <= 1
+#         # assert 0 <= alpha2 <= 1
+#         # assert 0 <= alpha <= 1
+#         sum_derivative = 0  # this line is the derivative of the objective function.
+#         for l in network.linkSet:
+#             tmpFlow1 = alpha1 * (x_bar[0][l]) + (1 - alpha1) * network.linkSet[l].flow1
+#             tmpFlow2 = alpha2 * (x_bar[1][l]) + (1 - alpha2) * network.linkSet[l].flow2
+#             tmpFlow=tmpFlow1+tmpFlow2
+
+#             tmpCost = costFunction(optimal,
+#                                    network.linkSet[l].fft,
+#                                    network.linkSet[l].alpha,
+#                                    tmpFlow,
+#                                    network.linkSet[l].capacity,
+#                                    network.linkSet[l].beta,
+#                                    network.linkSet[l].length,
+#                                    network.linkSet[l].speedLimit
+#                                    )
+#             tmpCost_c1=tmpCost*vot1+price1*network.linkSet[l].length
+#             tmpCost_c2=tmpCost*vot2+price2*network.linkSet[l].length
+
+#             #sum_derivative = sum_derivative + (x_bar[l] - network.linkSet[l].flow) * tmpCost
+#             sum_derivative = sum_derivative + (x_bar[0][l]-network.linkSet[l].flow1) * tmpCost_c1 + (x_bar[1][l]-network.linkSet[l].flow2) * tmpCost_c2
+
+#         return sum_derivative
+
+#     # sol = scipy.optimize.root_scalar(df, x0=np.array([0.5,0.5]), bracket=(0, 1))
+#     # assert 0 <= sol.root <= 1
+#     # return sol.root
+#     bounds = [(0, 1), (0, 1)]
+#     initial_guess = [0.5, 0.5]
+#     solution = minimize(df, initial_guess, method='Nelder-Mead', bounds=bounds)
+#     alpha1,alpha2 = solution.x
+#     if alpha1>1:
+#         alpha1=1
+#     if alpha2>1:
+#         alpha2=1
+#     return [alpha1,alpha2]
 
 def findAlpha(x_bar, network: FlowTransportNetwork, optimal: bool = False, costFunction=BPRcostFunction):
+
     """
     This uses unconstrained optimization to calculate the optimal step size required
     for Frank-Wolfe Algorithm
@@ -222,7 +309,10 @@ def findAlpha(x_bar, network: FlowTransportNetwork, optimal: bool = False, costF
         assert 0 <= alpha <= 1
         sum_derivative = 0  # this line is the derivative of the objective function.
         for l in network.linkSet:
-            tmpFlow = alpha * x_bar[l] + (1 - alpha) * network.linkSet[l].flow
+            tmpFlow1 = alpha * (x_bar[0][l]) + (1 - alpha) * network.linkSet[l].flow1
+            tmpFlow2 = alpha * (x_bar[1][l]) + (1 - alpha) * network.linkSet[l].flow2
+            tmpFlow=tmpFlow1+tmpFlow2
+
             tmpCost = costFunction(optimal,
                                    network.linkSet[l].fft,
                                    network.linkSet[l].alpha,
@@ -232,12 +322,18 @@ def findAlpha(x_bar, network: FlowTransportNetwork, optimal: bool = False, costF
                                    network.linkSet[l].length,
                                    network.linkSet[l].speedLimit
                                    )
-            sum_derivative = sum_derivative + (x_bar[l] - network.linkSet[l].flow) * tmpCost
+            tmpCost_c1=tmpCost*vot1+price1*network.linkSet[l].length
+            tmpCost_c2=tmpCost*vot2+price2*network.linkSet[l].length
+
+            #sum_derivative = sum_derivative + (x_bar[l] - network.linkSet[l].flow) * tmpCost
+            sum_derivative = sum_derivative + (x_bar[0][l]-network.linkSet[l].flow1) * tmpCost_c1 + (x_bar[1][l]-network.linkSet[l].flow2) * tmpCost_c2
+
         return sum_derivative
 
     sol = scipy.optimize.root_scalar(df, x0=np.array([0.5]), bracket=(0, 1))
     assert 0 <= sol.root <= 1
     return sol.root
+
 
 
 def tracePreds(dest, network: FlowTransportNetwork):
@@ -257,21 +353,39 @@ def loadAON(network: FlowTransportNetwork, computeXbar: bool = True):
     """
     This method produces auxiliary flows for all or nothing loading.
     """
-    x_bar = {l: 0.0 for l in network.linkSet}
+    x_bar1 = {l: 0.0 for l in network.linkSet}
+    x_bar2 = {l: 0.0 for l in network.linkSet}
     SPTT = 0.0
     for r in network.originZones:
-        DijkstraHeap(r, network=network)
+        DijkstraHeap(r, network=network,user_class=1)
         for s in network.zoneSet[r].destList:
-            dem = network.tripSet[r, s].demand
+            dem1 = network.tripSet[r, s].demand
 
-            if dem <= 0:
+            if dem1 <= 0:
                 continue
 
-            SPTT = SPTT + network.nodeSet[s].label * dem
+            SPTT = SPTT + network.nodeSet[s].label * dem1
 
             if computeXbar and r != s:
                 for spLink in tracePreds(s, network):
-                    x_bar[spLink] = x_bar[spLink] + dem
+                    x_bar1[spLink] = x_bar1[spLink] + dem1
+
+    for r in network.originZones:
+        DijkstraHeap(r, network=network,user_class=2)
+        for s in network.zoneSet[r].destList:
+            dem2 = network.tripSet[r, s].demand
+
+            if dem2 <= 0:
+                continue
+
+            SPTT = SPTT + network.nodeSet[s].label * dem2
+
+            if computeXbar and r != s:
+                for spLink in tracePreds(s, network):
+                    x_bar2[spLink] = x_bar2[spLink] + dem2
+
+
+    x_bar=[x_bar1,x_bar2]
 
     return SPTT, x_bar
 
@@ -334,24 +448,42 @@ def readNetwork(network_df: pd.DataFrame, network: FlowTransportNetwork):
 
 
 def get_TSTT(network: FlowTransportNetwork, costFunction=BPRcostFunction, use_max_capacity: bool = True):
-    TSTT = round(sum([network.linkSet[a].flow * costFunction(optimal=False,
+    TSTT = round(sum([network.linkSet[l].flow1  * vot1 * costFunction(optimal=False,
                                                              fft=network.linkSet[
-                                                                 a].fft,
+                                                                 l].fft,
                                                              alpha=network.linkSet[
-                                                                 a].alpha,
+                                                                 l].alpha,
                                                              flow=network.linkSet[
-                                                                 a].flow,
+                                                                 l].flow,
                                                              capacity=network.linkSet[
-                                                                 a].max_capacity if use_max_capacity else network.linkSet[
-                                                                 a].capacity,
+                                                                 l].max_capacity if use_max_capacity else network.linkSet[
+                                                                 l].capacity,
                                                              beta=network.linkSet[
-                                                                 a].beta,
+                                                                 l].beta,
                                                              length=network.linkSet[
-                                                                 a].length,
+                                                                 l].length,
                                                              maxSpeed=network.linkSet[
-                                                                 a].speedLimit
-                                                             ) for a in
-                      network.linkSet]), 9)
+                                                                 l].speedLimit
+                                                             ) for l in
+                      network.linkSet])
+                      +sum([network.linkSet[l].flow2  * vot2 * costFunction(optimal=False,
+                                                               fft=network.linkSet[
+                                                                 l].fft,
+                                                             alpha=network.linkSet[
+                                                                 l].alpha,
+                                                             flow=network.linkSet[
+                                                                 l].flow,
+                                                             capacity=network.linkSet[
+                                                                 l].max_capacity if use_max_capacity else network.linkSet[
+                                                                 l].capacity,
+                                                             beta=network.linkSet[
+                                                                 l].beta,
+                                                             length=network.linkSet[
+                                                                 l].length,
+                                                             maxSpeed=network.linkSet[
+                                                                 l].speedLimit
+                                                             ) for l in
+                      network.linkSet]), 2)
     return TSTT
 
 
@@ -397,7 +529,9 @@ def assignment_loop(network: FlowTransportNetwork,
 
         # Apply flow improvement
         for l in network.linkSet:
-            network.linkSet[l].flow = alpha * x_bar[l] + (1 - alpha) * network.linkSet[l].flow
+            network.linkSet[l].flow1 = alpha * x_bar[0][l] + (1 - alpha) * network.linkSet[l].flow1
+            network.linkSet[l].flow2 = alpha * x_bar[1][l] + (1 - alpha) * network.linkSet[l].flow2
+            network.linkSet[l].flow = network.linkSet[l].flow1+network.linkSet[l].flow2
 
         # Compute the new travel time
         updateTravelTime(network=network,
@@ -407,7 +541,8 @@ def assignment_loop(network: FlowTransportNetwork,
         # Compute the relative gap
         SPTT, _ = loadAON(network=network, computeXbar=False)
         SPTT = round(SPTT, 9)
-        TSTT = round(sum([network.linkSet[a].flow * network.linkSet[a].cost for a in
+        TSTT = round(sum([network.linkSet[l].flow1 * network.linkSet[l].cost1+
+                          network.linkSet[l].flow2 * network.linkSet[l].cost2 for l in
                           network.linkSet]), 9)
 
         # print(TSTT, SPTT, "TSTT, SPTT, Max capacity", max([l.capacity for l in network.linkSet.values()]))
@@ -459,12 +594,13 @@ def writeResults(network: FlowTransportNetwork, output_file: str, costFunction=B
     outFile.write(tmpOut + "\n")
     tmpOut = ["User equilibrium (UE) or system optimal (SO):\t"] + ["SO" if systemOptimal else "UE"]
     outFile.write("".join(tmpOut) + "\n\n")
-    tmpOut = "init_node\tterm_node\tflow\ttravelTime"
+    tmpOut = "init_node\tterm_node\tflow1\tflow2\ttravelTime"
     outFile.write(tmpOut + "\n")
     for i in network.linkSet:
         tmpOut = str(network.linkSet[i].init_node) + "\t" + str(
             network.linkSet[i].term_node) + "\t" + str(
-            network.linkSet[i].flow) + "\t" + str(costFunction(False,
+            int(network.linkSet[i].flow1)) + "\t"+ str(
+            int(network.linkSet[i].flow2)) + "\t"  + str(costFunction(False,
                                                                network.linkSet[i].fft,
                                                                network.linkSet[i].alpha,
                                                                network.linkSet[i].flow,
